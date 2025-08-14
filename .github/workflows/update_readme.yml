@@ -3,26 +3,29 @@ name: Update README Every Minute
 on:
   schedule:
     - cron: '* * * * *'  # Every minute
-  workflow_dispatch:       # Allow manual trigger
+  workflow_dispatch:  # Allow manual trigger
 
 jobs:
   update-readme:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: write  # This is the key fix - allows pushing commits
+    
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          persist-credentials: true   # keeps the token for pushing
-
+          persist-credentials: true  # keeps the token for pushing
+          token: ${{ secrets.GITHUB_TOKEN }}  # Explicitly use GitHub token
+      
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-
+      
       - name: Run Python script
         run: python main.py
-
+      
       - name: Commit and push changes
         run: |
           git config user.name "github-actions[bot]"
