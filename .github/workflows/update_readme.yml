@@ -2,7 +2,7 @@ name: Update README Every Minute
 
 on:
   schedule:
-    - cron: '* * * * *'  # Every minute
+    - cron: '*/10 * * * *'  # Every minute
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
