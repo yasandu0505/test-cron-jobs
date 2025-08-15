@@ -113,8 +113,8 @@ def main():
     
     # 🎯 ADD YOUR PDF URLs HERE
     pdf_urls = [
-        "https://documents.gov.lk/view/extra-gazettes/2025/8/2449-01_E.pdf",
-        "https://documents.gov.lk/view/extra-gazettes/2025/8/2448-17_E.pdf"
+        "https://drive.google.com/uc?id=1zLLgjPl71FSBnSxrq7XV0XbfJ_HzcckX&export=download",
+        "https://drive.google.com/uc?id=1JVnMYLWGKb10n0-_-952jDB7zHqU-bI4&export=download"
         # Add more URLs as needed
     ]
     
