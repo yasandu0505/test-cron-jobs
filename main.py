@@ -1,122 +1,133 @@
-from datetime import datetime
-import re
+import requests
+import os
 from pathlib import Path
+from datetime import datetime
+import hashlib
 
-README_PATH = Path("README.md")
+# Configuration
+DOWNLOAD_FOLDER = Path("downloaded_pdfs")
+LOG_FILE = Path("download_log.md")
 
-def update_readme():
+def ensure_folder_exists():
+    """Create download folder if it doesn't exist"""
+    DOWNLOAD_FOLDER.mkdir(exist_ok=True)
+
+def download_pdf(url, filename=None):
+    """Download a PDF from URL"""
+    try:
+        print(f"📥 Downloading: {url}")
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=30)
+        response.raise_for_status()
+        
+        # Check if it's actually a PDF
+        if 'application/pdf' not in response.headers.get('content-type', ''):
+            print(f"⚠️  Warning: {url} might not be a PDF")
+        
+        # Generate filename if not provided
+        if not filename:
+            filename = url.split('/')[-1]
+            if not filename.endswith('.pdf'):
+                filename += '.pdf'
+        
+        filepath = DOWNLOAD_FOLDER / filename
+        
+        # Check if file already exists and is the same
+        if filepath.exists():
+            existing_hash = hashlib.md5(filepath.read_bytes()).hexdigest()
+            new_hash = hashlib.md5(response.content).hexdigest()
+            if existing_hash == new_hash:
+                print(f"✅ File already exists and is identical: {filename}")
+                return False, filename, len(response.content)
+        
+        # Save the PDF
+        filepath.write_bytes(response.content)
+        file_size = len(response.content)
+        
+        print(f"✅ Downloaded: {filename} ({file_size:,} bytes)")
+        return True, filename, file_size
+        
+    except Exception as e:
+        print(f"❌ Error downloading {url}: {str(e)}")
+        return False, None, 0
+
+def update_log(downloads):
+    """Update the download log"""
     now = datetime.now()
-    timestamp_str = now.strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
     date_str = now.strftime("%B %d, %Y")
     
-    if README_PATH.exists():
-        content = README_PATH.read_text(encoding="utf-8")
+    if LOG_FILE.exists():
+        content = LOG_FILE.read_text(encoding="utf-8")
     else:
-        content = """# 🤖 Automated Cron Job Test
+        content = """# 📄 PDF Download Log
 
-Welcome to my automated cron job repository! This README is updated automatically every 5 minutes.
+Automated PDF downloads via GitHub Actions
 
-## 📊 Run Statistics
-<!-- STATS_START -->
-**Total Runs:** 0  
-**Last Updated:** Never  
-**Status:** 🟢 Active
-<!-- STATS_END -->
+## 📊 Download Statistics
+- **Total Downloads:** 0
+- **Last Run:** Never
+- **Status:** 🟢 Active
 
-## 📝 Recent Run History
-<!-- HISTORY_START -->
-<!-- HISTORY_END -->
-
----
-*This file is automatically updated by GitHub Actions* ⚡
+## 📝 Recent Downloads
 """
     
-    # Extract current stats
-    stats_match = re.search(r'<!-- STATS_START -->(.*?)<!-- STATS_END -->', content, re.DOTALL)
-    current_runs = 0
+    # Count new downloads
+    new_downloads = sum(1 for success, _, _ in downloads if success)
+    total_size = sum(size for success, _, size in downloads if success)
     
-    if stats_match:
-        run_match = re.search(r'\*\*Total Runs:\*\* (\d+)', stats_match.group(1))
-        if run_match:
-            current_runs = int(run_match.group(1))
-    
-    new_run_count = current_runs + 1
-    
-    # Update stats section
-    new_stats = f"""<!-- STATS_START -->
-**Total Runs:** {new_run_count}  
-**Last Updated:** {date_str} at {now.strftime("%I:%M:%S %p")}  
-**Status:** 🟢 Active
-<!-- STATS_END -->"""
-    
-    if "<!-- STATS_START -->" in content:
-        content = re.sub(
-            r'<!-- STATS_START -->.*?<!-- STATS_END -->',
-            new_stats,
-            content,
-            flags=re.DOTALL
-        )
-    else:
-        # Add stats section if not found
-        content = content.replace("# 🤖 Automated Cron Job Test", 
-                                f"# 🤖 Automated Cron Job Test\n\n## 📊 Run Statistics\n{new_stats}")
-    
-    # Create new log entry
-    emoji_list = ["🚀", "⭐", "🎯", "💫", "🔥", "✨", "🎉", "🌟", "💪", "🎊"]
-    emoji = emoji_list[new_run_count % len(emoji_list)]
-    
-    new_log_entry = f"""
-### {emoji} Run #{new_run_count} - {timestamp_str}
+    # Add new log entry
+    log_entry = f"""
+### 🔄 Run - {timestamp}
 - **Date:** {date_str}
 - **Time:** {now.strftime("%I:%M:%S %p")} UTC
-- **Status:** ✅ Success
-- **Action:** README updated automatically
+- **New Downloads:** {new_downloads}
+- **Total Size:** {total_size:,} bytes
+- **Files:**
 """
     
-    # Add to history section
-    if "<!-- HISTORY_START -->" in content and "<!-- HISTORY_END -->" in content:
-        history_match = re.search(r'<!-- HISTORY_START -->(.*?)<!-- HISTORY_END -->', content, re.DOTALL)
-        
-        if history_match:
-            existing_history = history_match.group(1).strip()
-            
-            # Keep only last 10 entries to prevent file from getting too large
-            history_entries = re.findall(r'### [^\n]+ - \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}.*?(?=### |$)', existing_history, re.DOTALL)
-            
-            # Keep most recent 9 entries and add the new one
-            recent_entries = history_entries[:9] if len(history_entries) >= 9 else history_entries
-            
-            new_history = f"<!-- HISTORY_START -->{new_log_entry}"
-            for entry in recent_entries:
-                new_history += f"\n{entry.strip()}\n"
-            new_history += "<!-- HISTORY_END -->"
-            
-            content = re.sub(
-                r'<!-- HISTORY_START -->.*?<!-- HISTORY_END -->',
-                new_history,
-                content,
-                flags=re.DOTALL
-            )
-        else:
-            # First entry
-            content = content.replace(
-                "<!-- HISTORY_START -->\n<!-- HISTORY_END -->",
-                f"<!-- HISTORY_START -->{new_log_entry}\n<!-- HISTORY_END -->"
-            )
-    else:
-        # Add history section if not found
-        history_section = f"\n## 📝 Recent Run History\n<!-- HISTORY_START -->{new_log_entry}\n<!-- HISTORY_END -->"
-        content = content.strip() + history_section
+    for success, filename, size in downloads:
+        if success and filename:
+            log_entry += f"  - ✅ {filename} ({size:,} bytes)\n"
+        elif filename:
+            log_entry += f"  - ⚪ {filename} (already exists)\n"
     
-    README_PATH.write_text(content, encoding="utf-8")
-    print(f"✅ README updated! Run #{new_run_count} logged at {timestamp_str}")
+    # Insert at the beginning of recent downloads
+    if "## 📝 Recent Downloads" in content:
+        content = content.replace("## 📝 Recent Downloads", f"## 📝 Recent Downloads{log_entry}")
+    else:
+        content += log_entry
+    
+    LOG_FILE.write_text(content, encoding="utf-8")
 
 def main():
-    print("🤖 Hi, I am a cron job!")
+    """Main function - add your PDF URLs here"""
+    print("📄 Starting PDF Download Job...")
     print(f"⏰ Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("📝 Updating README with new run log...")
-    update_readme()
-    print("🎉 All done!")
+    
+    ensure_folder_exists()
+    
+    # 🎯 ADD YOUR PDF URLs HERE
+    pdf_urls = [
+        "https://documents.gov.lk/view/extra-gazettes/2025/8/2449-01_E.pdf",
+        "https://documents.gov.lk/view/extra-gazettes/2025/8/2448-17_E.pdf"
+        # Add more URLs as needed
+    ]
+    
+    downloads = []
+    
+    for url in pdf_urls:
+        success, filename, size = download_pdf(url)
+        downloads.append((success, filename, size))
+    
+    # Update log
+    update_log(downloads)
+    
+    print(f"\n🎉 Job completed! Downloaded {sum(1 for s, _, _ in downloads if s)} new files")
 
 if __name__ == "__main__":
     main()
