@@ -33,7 +33,7 @@ jobs:
       - name: Commit and push changes
         run: |
           git config user.name "yasandu0505"
-          git config user.email "your-email@example.com"
+          git config user.email "yasanduyaka2005@gmail.com"
           git add .
           git commit -m "📄 Automated PDF download - $(date)" || echo "No changes to commit"
           git push
