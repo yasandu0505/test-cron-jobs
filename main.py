@@ -6,14 +6,14 @@ import hashlib
 
 # Configuration
 DOWNLOAD_FOLDER = Path("downloaded_pdfs")
-LOG_FILE = Path("download_log.md")
+LOG_FILE = Path("README.md")
 
 def ensure_folder_exists():
     """Create download folder if it doesn't exist"""
     DOWNLOAD_FOLDER.mkdir(exist_ok=True)
 
 def download_pdf(url, filename=None):
-    """Download a PDF from URL"""
+    """Download a PDF from URL with timestamp"""
     try:
         print(f"📥 Downloading: {url}")
         
@@ -28,23 +28,33 @@ def download_pdf(url, filename=None):
         if 'application/pdf' not in response.headers.get('content-type', ''):
             print(f"⚠️  Warning: {url} might not be a PDF")
         
-        # Generate filename if not provided
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
         if not filename:
-            filename = url.split('/')[-1]
-            if not filename.endswith('.pdf'):
-                filename += '.pdf'
+            # Extract base name from URL
+            base_name = url.split('/')[-1]
+            if 'export=download' in url:  # Handle Google Drive URLs
+                base_name = "document"
+            if not base_name or base_name == 'download':
+                base_name = "pdf_file"
+            
+            # Remove .pdf extension if it exists, we'll add it with timestamp
+            if base_name.endswith('.pdf'):
+                base_name = base_name[:-4]
+            
+            filename = f"{base_name}_{timestamp}.pdf"
+        else:
+            # Add timestamp to provided filename
+            name_parts = filename.rsplit('.', 1)
+            if len(name_parts) == 2 and name_parts[1].lower() == 'pdf':
+                filename = f"{name_parts[0]}_{timestamp}.pdf"
+            else:
+                filename = f"{filename}_{timestamp}.pdf"
         
         filepath = DOWNLOAD_FOLDER / filename
         
-        # Check if file already exists and is the same
-        if filepath.exists():
-            existing_hash = hashlib.md5(filepath.read_bytes()).hexdigest()
-            new_hash = hashlib.md5(response.content).hexdigest()
-            if existing_hash == new_hash:
-                print(f"✅ File already exists and is identical: {filename}")
-                return False, filename, len(response.content)
-        
-        # Save the PDF
+        # Save the PDF (no duplicate checking since we use timestamps)
         filepath.write_bytes(response.content)
         file_size = len(response.content)
         
@@ -76,16 +86,32 @@ Automated PDF downloads via GitHub Actions
 ## 📝 Recent Downloads
 """
     
-    # Count new downloads
-    new_downloads = sum(1 for success, _, _ in downloads if success)
+    # Count successful downloads
+    successful_downloads = sum(1 for success, _, _ in downloads if success)
     total_size = sum(size for success, _, size in downloads if success)
+    
+    # Update statistics in header
+    lines = content.split('\n')
+    for i, line in enumerate(lines):
+        if line.startswith('- **Last Run:**'):
+            lines[i] = f'- **Last Run:** {timestamp}'
+        elif line.startswith('- **Total Downloads:**'):
+            # Extract current count and add new downloads
+            try:
+                current_count = int(line.split('**')[2].strip())
+                new_total = current_count + successful_downloads
+                lines[i] = f'- **Total Downloads:** {new_total}'
+            except:
+                lines[i] = f'- **Total Downloads:** {successful_downloads}'
+    
+    content = '\n'.join(lines)
     
     # Add new log entry
     log_entry = f"""
 ### 🔄 Run - {timestamp}
 - **Date:** {date_str}
 - **Time:** {now.strftime("%I:%M:%S %p")} UTC
-- **New Downloads:** {new_downloads}
+- **Downloads:** {successful_downloads}
 - **Total Size:** {total_size:,} bytes
 - **Files:**
 """
@@ -93,8 +119,8 @@ Automated PDF downloads via GitHub Actions
     for success, filename, size in downloads:
         if success and filename:
             log_entry += f"  - ✅ {filename} ({size:,} bytes)\n"
-        elif filename:
-            log_entry += f"  - ⚪ {filename} (already exists)\n"
+        else:
+            log_entry += f"  - ❌ Download failed\n"
     
     # Insert at the beginning of recent downloads
     if "## 📝 Recent Downloads" in content:
