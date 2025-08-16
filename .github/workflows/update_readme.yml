@@ -2,7 +2,7 @@ name: Download PDFs
 
 on:
   schedule:
-    - cron: '*/10 * * * *'  # Every 2 hours (adjust as needed)
+    - cron: '* */2 * * *'  # Every 2 hours (adjust as needed)
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
